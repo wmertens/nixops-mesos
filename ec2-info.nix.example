@@ -1,0 +1,10 @@
+{ config, pkgs, ... }:
+
+with pkgs.lib;
+
+{
+  deployment.ec2.accessKeyId = "AKIA....";
+  deployment.ec2.keyPair = "";
+  deployment.ec2.privateKey = mkDefault "/root/id_rsa";
+  deployment.ec2.securityGroups = mkDefault [ "default" ];
+}

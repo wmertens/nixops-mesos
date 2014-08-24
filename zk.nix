@@ -12,10 +12,6 @@ let
         if zk.enable then "server.${toString zk.id} = ${node}:2888:3888\n" else ""
       ) nodes);
     in {
-      config.deployment = {
-        targetEnv = "virtualbox";
-        virtualbox.memorySize = 2048; # megabytes
-      };
       config.services.zookeeper = {
       	enable = true;
 	id = n;
