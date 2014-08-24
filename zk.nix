@@ -17,6 +17,8 @@ let
 	id = n;
 	servers = zkServers;
       };
+      config.networking.firewall.enable = false;
+      config.environment.systemPackages = with pkgs; [ zookeeper netcat ];
     });
 
 in listToAttrs (map makeMachine (range 0 (nrMachines - 1)))
