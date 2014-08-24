@@ -1,6 +1,6 @@
 {
   defaults = 
-    { config, pkgs ... };
+    { config, pkgs, ... }:
     {
       deployment = {
         targetEnv = "virtualbox";
