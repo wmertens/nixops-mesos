@@ -5,38 +5,43 @@
 with import <nixpkgs/lib>;
 
 {
-  defaults = 
-    { config, pkgs, nodes, ... }:
-      let
-        zkServers = concatStrings (
-          mapAttrsToList (hostId: node:
-            let zk = node.config.services.zookeeper; in
-              if zk.enable then ''
-                server.${toString zk.id} = ${hostId}:2888:3888
-              '' else ""
-          ) nodes
-        );
+  defaults = { config, pkgs, nodes, ... }:
+    let
+      mapNodesToList = f: mapAttrsToList f nodes;
+    in let
+      mapNodesToString = f: concatStrings (mapNodesToList f);
+    in let
 
-        allowOthers = concatStrings (
-          mapAttrsToList (hostId: node:
-            let zk = node.config.services.zookeeper; in
-              if zk.enable then ''
-                iptables -A nixos-fw -s ${hostId} -p tcp -m multiport --dports 2888,3888 -m comment --comment "Allow zookeeper node ${hostId}" -j ACCEPT
-              '' else ""
-          ) nodes
-        );
+      zkServers = mapNodesToString (nodeId: node:
+        let zk = node.config.services.zookeeper; in
+        optionalString zk.enable "server.${toString zk.id} = ${nodeId}:2888:3888\n"
+      );
 
-      in
-        mkIf config.services.zookeeper.enable
-        {
-            services.zookeeper = {
-              servers = zkServers;
-            };
-            networking.firewall = {
-              allowedTCPPorts = [ 2181 ];
-              extraCommands = allowOthers;
-            };
-            # Client binaries
-            environment.systemPackages = with pkgs; [ zookeeper ];
-        };
+      allowOtherMasters = mapNodesToString (nodeId: node:
+        let zk = node.config.services.zookeeper; in
+        optionalString zk.enable ''
+          iptables -A nixos-fw -s ${nodeId} -p tcp -m multiport --dports 2888,3888 -m comment --comment "zk: allow master ${nodeId}" -j ACCEPT
+        ''
+      );
+
+      allowAll = mapNodesToString (nodeId: node:
+        let zk = node.config.services.zookeeper; in
+        optionalString zk.enable ''
+          iptables -A nixos-fw -s ${nodeId} -p tcp --dport ${toString zk.port} -m comment --comment "zk: allow node ${nodeId}" -j ACCEPT
+        ''
+      );
+
+    in
+      mkIf config.services.zookeeper.enable
+      {
+          services.zookeeper = {
+            servers = zkServers;
+          };
+          networking.firewall = {
+            # We allow other masters to master ports and other nodes to zk port, no-one else
+            extraCommands = allowOtherMasters + allowAll;
+          };
+          # Client binaries
+          environment.systemPackages = with pkgs; [ zookeeper ];
+      };
 }

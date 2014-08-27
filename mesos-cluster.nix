@@ -6,59 +6,52 @@
 with import <nixpkgs/lib>;
 
 {
-  defaults = 
-    { config, pkgs, nodes, ... }:
+  defaults = { config, pkgs, nodes, ... }:
     let
-        isMaster = config.services.mesos.master.enable;
-        isSlave = config.services.mesos.slave.enable;
-        mapNodesToList = f: mapAttrsToList f nodes;
+      isMaster = config.services.mesos.master.enable;
+      isSlave = config.services.mesos.slave.enable;
+      mapNodesToList = f: mapAttrsToList f nodes;
+    in let
+      mapNodesToString = f: concatStrings (mapNodesToList f);
     in mkIf (isMaster || isSlave) (
       let
+
         zkServers = concatStringsSep  "," (remove "" 
-          (mapNodesToList (hostId: node:
-              let zk = node.config.services.zookeeper; in
-                if zk.enable then "${hostId}:2181" else ""
-            ))
+          (mapNodesToList (nodeId: node:
+            optionalString node.config.services.zookeeper.enable "${nodeId}:2181"
+          ))
         );
 
-        allowSlave2Slave = concatStrings (
-          mapNodesToList (hostId: node:
+        allowSlave2Slave = mapNodesToString (nodeId: node:
             let mesos = node.config.services.mesos; in
-              if mesos.slave.enable then ''
-                iptables -A nixos-fw -s ${hostId} -p tcp -m comment --comment "Allow mesos slave ${hostId}" -j ACCEPT
-              '' else ""
-          )
+              optionalString mesos.slave.enable ''
+                iptables -A nixos-fw -s ${nodeId} -p tcp -m comment --comment "Allow mesos slave ${nodeId}" -j ACCEPT
+              ''
         );
 
-        allowSlave2Master = concatStrings (
-          mapNodesToList (hostId: node:
+        allowSlave2Master = mapNodesToString (nodeId: node:
             let mesos = node.config.services.mesos; in
-              if mesos.slave.enable then ''
-                iptables -A nixos-fw -s ${hostId} -p tcp --dport 5050 -m comment --comment "Allow mesos slave ${hostId}" -j ACCEPT
-              '' else ""
-          )
+              optionalString mesos.slave.enable ''
+                iptables -A nixos-fw -s ${nodeId} -p tcp --dport 5050 -m comment --comment "Allow mesos slave ${nodeId}" -j ACCEPT
+              ''
         );
 
-        allowMaster2Slave = concatStrings (
-          mapNodesToList (hostId: node:
+        allowMaster2Slave = mapNodesToString (nodeId: node:
             let mesos = node.config.services.mesos; in
-              if mesos.master.enable then ''
-                iptables -A nixos-fw -s ${hostId} -p tcp --dport 5051 -m comment --comment "Allow mesos master ${hostId}" -j ACCEPT
-              '' else ""
-          )
+              optionalString mesos.master.enable ''
+                iptables -A nixos-fw -s ${nodeId} -p tcp --dport 5051 -m comment --comment "Allow mesos master ${nodeId}" -j ACCEPT
+              ''
         );
 
-        allowMaster2Master = concatStrings (
-          mapNodesToList (hostId: node:
+        allowMaster2Master = mapNodesToString (nodeId: node:
             let mesos = node.config.services.mesos; in
-              if mesos.master.enable then ''
-                iptables -A nixos-fw -s ${hostId} -p tcp --dport 5050 -m comment --comment "Allow mesos master ${hostId}" -j ACCEPT
-              '' else ""
-          )
+              optionalString mesos.master.enable ''
+                iptables -A nixos-fw -s ${nodeId} -p tcp --dport 5050 -m comment --comment "Allow mesos master ${nodeId}" -j ACCEPT
+              ''
         );
 
-        masterCount = count (x: x.config.services.mesos.master.enable)
-          (attrValues nodes);
+        masterCount = count (x: x.config.services.mesos.master.enable) (attrValues nodes);
+
       in let
         quorum = if masterCount > 1 then ((builtins.div masterCount 2) + 1) else 0;
       in
@@ -72,10 +65,10 @@ with import <nixpkgs/lib>;
           master = "zk://${zkServers}/mesos";
         };
 
-        networking.firewall.extraCommands = (concatStrings [
-         (optionalString isSlave (concatStrings [ allowMaster2Slave  allowSlave2Slave ]))
-         (optionalString isMaster (concatStrings [ allowMaster2Master  allowSlave2Master ]))
-        ]);
+        networking.firewall.extraCommands = (
+          (optionalString isSlave (allowMaster2Slave + allowSlave2Slave))
+          + (optionalString isMaster (allowMaster2Master + allowSlave2Master))
+        );
 
         environment.systemPackages = with pkgs; [ mesos ] ++ (optionals isSlave [ spark ]);
       }
