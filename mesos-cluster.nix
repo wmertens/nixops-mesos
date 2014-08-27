@@ -9,11 +9,11 @@ with import <nixpkgs/lib>;
   defaults = 
     { config, pkgs, nodes, ... }:
       let
-        zkServers = concatStringsSep  "," (
-          mapAttrsToList (hostId: node:
-            let zk = node.config.services.zookeeper; in
-              if zk.enable then "${hostId}:2181" else ""
-          ) nodes
+        zkServers = concatStringsSep  "," (remove "" 
+          (mapAttrsToList (hostId: node:
+              let zk = node.config.services.zookeeper; in
+                if zk.enable then "${hostId}:2181" else ""
+            ) nodes)
         );
 
         allowSlave2Slave = concatStrings (
