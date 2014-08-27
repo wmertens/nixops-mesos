@@ -1,0 +1,7 @@
+[submodule "nix-vd"]
+	path = nix-vd
+	url = ../nix-vd/
+[submodule "nixpkgs"]
+	path = nixpkgs
+	url = https://github.com/nathan-gs/nixpkgs.git
+	branch = mesos_zk
