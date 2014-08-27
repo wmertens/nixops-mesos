@@ -8,7 +8,6 @@ let
     ({ config, pkgs, ... }: {
       config.services.mesos.master = {
         enable = true;
-        quorum=0;  # TODO calc this
       };
       config.services.zookeeper = {
         enable = true;

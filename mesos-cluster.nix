@@ -8,56 +8,64 @@ with import <nixpkgs/lib>;
 {
   defaults = 
     { config, pkgs, nodes, ... }:
+    let
+        isMaster = config.services.mesos.master.enable;
+        isSlave = config.services.mesos.slave.enable;
+        mapNodesToList = f: mapAttrsToList f nodes;
+    in mkIf (isMaster || isSlave) (
       let
         zkServers = concatStringsSep  "," (remove "" 
-          (mapAttrsToList (hostId: node:
+          (mapNodesToList (hostId: node:
               let zk = node.config.services.zookeeper; in
                 if zk.enable then "${hostId}:2181" else ""
-            ) nodes)
+            ))
         );
 
         allowSlave2Slave = concatStrings (
-          mapAttrsToList (hostId: node:
+          mapNodesToList (hostId: node:
             let mesos = node.config.services.mesos; in
               if mesos.slave.enable then ''
                 iptables -A nixos-fw -s ${hostId} -p tcp -m comment --comment "Allow mesos slave ${hostId}" -j ACCEPT
               '' else ""
-          ) nodes
+          )
         );
 
         allowSlave2Master = concatStrings (
-          mapAttrsToList (hostId: node:
+          mapNodesToList (hostId: node:
             let mesos = node.config.services.mesos; in
               if mesos.slave.enable then ''
                 iptables -A nixos-fw -s ${hostId} -p tcp --dport 5050 -m comment --comment "Allow mesos slave ${hostId}" -j ACCEPT
               '' else ""
-          ) nodes
+          )
         );
 
         allowMaster2Slave = concatStrings (
-          mapAttrsToList (hostId: node:
+          mapNodesToList (hostId: node:
             let mesos = node.config.services.mesos; in
               if mesos.master.enable then ''
                 iptables -A nixos-fw -s ${hostId} -p tcp --dport 5051 -m comment --comment "Allow mesos master ${hostId}" -j ACCEPT
               '' else ""
-          ) nodes
+          )
         );
 
         allowMaster2Master = concatStrings (
-          mapAttrsToList (hostId: node:
+          mapNodesToList (hostId: node:
             let mesos = node.config.services.mesos; in
               if mesos.master.enable then ''
                 iptables -A nixos-fw -s ${hostId} -p tcp --dport 5050 -m comment --comment "Allow mesos master ${hostId}" -j ACCEPT
               '' else ""
-          ) nodes
+          )
         );
 
-        isMaster = config.services.mesos.master.enable;
-        isSlave = config.services.mesos.slave.enable;
+        masterCount = count (x: x.config.services.mesos.master.enable)
+          (attrValues nodes);
+      in let
+        quorum = if masterCount > 1 then ((builtins.div masterCount 2) + 1) else 0;
       in
       {
         services.mesos.master =  mkIf isMaster {
           zk = "zk://${zkServers}/mesos";
+          inherit quorum;
         };
 
         services.mesos.slave = mkIf isSlave {
@@ -70,5 +78,6 @@ with import <nixpkgs/lib>;
         ]);
 
         environment.systemPackages = with pkgs; [ mesos ] ++ (optionals isSlave [ spark ]);
-      };
+      }
+    );
 }
