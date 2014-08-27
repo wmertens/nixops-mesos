@@ -52,17 +52,23 @@ with import <nixpkgs/lib>;
           ) nodes
         );
 
+        isMaster = config.services.mesos.master.enable;
+        isSlave = config.services.mesos.slave.enable;
       in
       {
-        services.mesos.slave = mkIf config.services.mesos.slave.enable {
-          master = "zk://${zkServers}/mesos";
-        };
-        networking.firewall.extraCommands = (concatStrings [
-                   (optionalString config.services.mesos.slave.enable (concatStrings [ allowMaster2Slave  allowSlave2Slave ]))
-                   (optionalString config.services.mesos.master.enable (concatStrings [ allowMaster2Master  allowSlave2Master ]))
-                ]);
-        services.mesos.master =  mkIf config.services.mesos.master.enable {
+        services.mesos.master =  mkIf isMaster {
           zk = "zk://${zkServers}/mesos";
         };
+
+        services.mesos.slave = mkIf isSlave {
+          master = "zk://${zkServers}/mesos";
+        };
+
+        networking.firewall.extraCommands = (concatStrings [
+         (optionalString isSlave (concatStrings [ allowMaster2Slave  allowSlave2Slave ]))
+         (optionalString isMaster (concatStrings [ allowMaster2Master  allowSlave2Master ]))
+        ]);
+
+        environment.systemPackages = with pkgs; [ mesos ] ++ (optionals isSlave [ spark ]);
       };
 }
