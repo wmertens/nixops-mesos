@@ -3,24 +3,27 @@
 with import <nixpkgs/lib>;
 
 let
+  makeNode = name: nodeFromN: n:
+    nameValuePair "${name}-${toString n}" (nodeFromN n);
+  makeNodes = name: nodeFromN: count:
+    listToAttrs (map (makeNode name nodeFromN) (range 0 (count - 1)));
 
-  makeMaster = n: nameValuePair "master-${toString n}"
-    ({ config, pkgs, ... }: {
-      config.services.mesos.master = {
-        enable = true;
-      };
-      config.services.zookeeper = {
-        enable = true;
-        id = n;
-      };
-    });
+  masterNode = n: { config, pkgs, ... }:
+  {
+    config.services.mesos.master = {
+      enable = true;
+    };
+    config.services.zookeeper = {
+      enable = true;
+      id = n;
+    };
+  };
 
-  makeSlave = n: nameValuePair "slave-${toString n}"
-    ({ config, pkgs, ... }: {
-      config.services.mesos.slave.enable = true;
-    });
+  slaveNode = n: { config, pkgs, ... }:
+  {
+    config.services.mesos.slave.enable = true;
+  };
 
-in listToAttrs (
-  (map makeMaster (range 0 (mesosMasterCount - 1)))
-  ++ (map makeSlave (range 0 (mesosSlaveCount - 1)))
-)
+in
+  makeNodes "master" masterNode mesosMasterCount
+  // (makeNodes "slave" slaveNode mesosSlaveCount)
