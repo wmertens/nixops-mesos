@@ -50,6 +50,8 @@ with import <nixpkgs/lib>;
               ''
         );
 
+        allowMasterHTTP = ''iptables -A nixos-fw -p tcp --dport 5050 -m comment --comment "Allow direct access" -j ACCEPT'';
+
         masterCount = count (x: x.config.services.mesos.master.enable) (attrValues nodes);
 
       in let
@@ -65,9 +67,11 @@ with import <nixpkgs/lib>;
           master = "zk://${zkServers}/mesos";
         };
 
+        virtualisation.docker.enable = mkIf isSlave true;
+
         networking.firewall.extraCommands = (
           (optionalString isSlave (allowMaster2Slave + allowSlave2Slave))
-          + (optionalString isMaster (allowMaster2Master + allowSlave2Master))
+          + (optionalString isMaster (allowMaster2Master + allowSlave2Master + allowMasterHTTP))
         );
 
         environment.systemPackages = with pkgs; [ mesos ] ++ (optionals isSlave [ spark ]);
